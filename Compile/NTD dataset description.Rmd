@@ -1,0 +1,60 @@
+---
+title: "NTD dataset"
+Date: 01/30/2018
+output: pdf
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+perl<-"C:/Strawberry/perl/bin/perl5.26.1.exe"
+
+library(gdata)
+contract<-read.xls("C:/Z-Work/Transit project/Transit agency profile/2016 Contractual Relations_0.xlsx",sheet = 1,perl = perl)
+capitalUse<-read.xls("C:/Z-Work/Transit project/Transit agency profile/2016 Capital Use_0 .xlsx",sheet = 1,perl = perl)
+employees<-read.xls("C:/Z-Work/Transit project/Transit agency profile/2016 Transit Agency Employees.xlsx",sheet = 1,perl = perl)
+stations<-read.xls("C:/Z-Work/Transit project/Transit agency profile/2016 Transit Stations.xlsx",sheet = 1,perl = perl)
+maintenance<-read.xls("C:/Z-Work/Transit project/Transit agency profile/2016 Vehicle Maintenance.xlsx",sheet = 1,perl = perl)
+uzaSums<-read.xls("C:/Z-Work/Transit project/Transit agency profile/UZA Sums.xlsx",sheet = 1,perl = perl)
+facilities<-read.xls("C:/Z-Work/Transit project/Transit agency profile/Transit Facilities.xlsx",sheet = 1,perl = perl)
+
+
+RevenueVehicle<-read.xls("C:/Z-Work/Transit project/Transit agency profile/Revenue Vehicle Inventory_0.xlsx",sheet = 1,perl = perl)
+RevenueVehicle<-read.xls("C:/Z-Work/Transit project/Transit agency profile/Revenue Vehicle Inventory_0.xlsx",sheet = 1,perl = perl)
+RevenueVehicle<-read.xls("C:/Z-Work/Transit project/Transit agency profile/Revenue Vehicle Inventory_0.xlsx",sheet = 1,perl = perl)
+
+library(dplyr)
+
+```
+```{r uza summary}
+
+names(uzaSums)
+```
+
+```{r contract}
+names(contract)
+distinct(contract,Reporter.Contractual.Position)
+distinct(contract,Type.of.Contract)
+distinct(contract,Primary.Feature)
+
+
+```
+
+```{r capitalUse }
+names(capitalUse)
+
+```
+
+```{r employees }
+names(employees)
+employees %>% select(contains("Capital")) %>% names(.)
+
+```
+```{r resources }
+names(stations)  #aggregate number of stations 
+names(maintenance)
+names(RevenueVehicle)
+names(facilities)
+render("NTD DAT.Rmd", output_format = "word_document")
+```
+
