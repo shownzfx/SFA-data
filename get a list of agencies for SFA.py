@@ -112,6 +112,7 @@ filename_export="C:\Z-Work\Transit project\Transit agency profile\Population Den
 
 
 chosenAgencies.to_csv(filename_export,header=True,index=False)
+chosenAgencies.columns
 
 
 
