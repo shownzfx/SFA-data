@@ -4,31 +4,6 @@ import re
 import os
 import ntpath
 
-# tableName will be auto-set if empty
-tableName = ""
-dir = "C:\\Z-Work\\Transit project\\Transit agency profile\\Population Density from Agency Profile"
-
-# Reads all csv files in this directory and imports them into sql
-# files in dir - file name should start with the year.
-# all files in dir should go into the same table
-
-# fileName = "2016 Transit Agency Employees"
-# filePath = dir + fileName + ".csv"
-
-if not dir.endswith('\\'):
-    dir = dir + '\\'
-
-files = os.listdir(dir)
-files = filter(lambda x: x.endswith('.csv'), files)
-files = list(map(lambda x: dir + x, files))
-files = sorted(files, reverse=True)
-
-cnx = mysql.connector.connect(user='root', password='DengYiXia',
-                              host='127.0.0.1',
-                              database='import',
-                              charset='utf8',
-                              use_unicode=True)
-
 
 def chunks(list, n):
     """Yield successive n-sized chunks from list."""
@@ -36,19 +11,46 @@ def chunks(list, n):
         yield list[i:i + n]
 
 
-def isNumber(val):
+def get_csv_files(dir):
+    files = os.listdir(dir)
+    files = filter(lambda x: x.endswith('.csv'), files)
+    files = list(map(lambda x: dir + x, files))
+    files = sorted(files, reverse=True)
+    return files
+
+
+def get_db_columns(files):
+    columns = []
+    for path in files:
+        print("analyzing " + path)
+        table = read_csv('tmp_table', path, columns)
+        columns = table.columns
+
+    columns = [x for x in columns if x.sqlName != 'total']
+    analyze_column_types(columns)
+    return columns
+
+
+def parse_year(path):
+    fileName = ntpath.basename(path)
+    yearResult = re.match('(^|[^0-9])([0-9]{4})([^0-9]|$)', fileName)
+    if yearResult is not None:
+        return yearResult.groups()[1]
+
+
+def is_number(val):
     return re.match(r'^([0-9,\.]+)$', val) is not None and (len(val) == 1 or val[0] != '0')
 
 
-def getFileName(path):
-    return os.path.splitext("path_to_file")[0]
+def get_file_name(path):
+    return os.path.splitext(os.path.basename(path))[0]
 
 
-def getDirName(path):
+def get_dir_name(path):
     return os.path.basename(os.path.dirname(path))
 
 
-def toSqlName(csvName):
+def to_sql_name(csvName):
     csvName = csvName.strip()
 
     sqlName = ''
@@ -88,11 +90,14 @@ class DbColumn:  # only read each column
         self.csvIndex = csvIndex
         self.sqlType = sqlType
         self.csvName = csvName.strip()
-        self.sqlName = toSqlName(self.csvName)
+        self.sqlName = to_sql_name(self.csvName)
         if(self.sqlName == 'other_fuel_description'):
             self.sqlType = 'text'
         if(self.sqlName == '_5_digit_ntd_id' or self.sqlName == 'legacy_ntd_id'):
             self.sqlType = 'text'
+
+    def should_insert(self):
+        return self.csvIndex != -1
 
     def getSqlType(self):
         if self.sqlType == 'numeric':
@@ -127,7 +132,7 @@ class DbColumn:  # only read each column
         val = row[self.csvIndex].strip()
         if(val == ''):
             return
-        if isNumber(val):
+        if is_number(val):
             self.numNumericRows = self.numNumericRows + 1
             self.numDigits = max(len(val), self.numDigits)
             if '.' in val:
@@ -149,6 +154,9 @@ class YearColumn(DbColumn):
         self.year = year
         self.includeInTotal = False
 
+    def should_insert(self):
+        return True
+
     def getSqlValue(self, row):  # why row
         return self.year
 
@@ -168,6 +176,9 @@ class TotalColumn(DbColumn):
         self.sqlType = 'numeric'
         self.nullable = False
         self.includeInTotal = False
+
+    def should_insert(self):
+        return True
 
     def include(self, column):
         return column.sqlType != 'text' and column.sqlName != 'total' and column.includeInTotal
@@ -218,6 +229,9 @@ class DbTable:
         sql += '\n);'
         return sql
 
+    def drop(self, cursor):
+        cursor.execute('drop table if exists ' + self.name)
+
     def getInsertArray(self, rows):
         arr = []
         for row in rows:
@@ -228,7 +242,7 @@ class DbTable:
         return arr
 
     def run_insert_commands(self, rows, cursor):
-        columns = [x for x in self.columns if x.csvIndex != -1]
+        columns = [x for x in self.columns if x.should_insert()]
         placeholders = ', '.join(['%s'] * len(columns))
         # how did you get sqlName
         columnNames = ', '.join(map(lambda x: x.sqlName, columns))
@@ -239,7 +253,7 @@ class DbTable:
             cursor.execute(sql, values)
 
 
-def readCsv(path, columns=[]):
+def read_csv(tableName, path, columns=[]):
     for col in columns:
         col.csvIndex = -1
     with open(path, errors='ignore') as csv_file:
@@ -251,7 +265,7 @@ def readCsv(path, columns=[]):
                 for idx in range(0, len(row)):
                     val = row[idx]
                     if(val.strip() != ''):
-                        sqlName = toSqlName(val)
+                        sqlName = to_sql_name(val)
                         dbCol = getCol(columns, sqlName)
                         if dbCol is None:
                             dbCol = DbColumn(idx, val)
@@ -280,54 +294,62 @@ def analyze_column_types(columns):
                 print('col had not much data ' + col.csvName)
 
 
-def logToFile(msg):
-    with open("log.txt", "a") as myfile:
+logFile = "log.txt"
+
+
+def remove_log_file():
+    try:
+        os.remove(logFile)
+    except:
+        return
+
+
+def log_to_file(msg):
+    with open(logFile, "a") as myfile:
         myfile.write(msg)
 
 
-try:
-    if(tableName == ""):
-        tableName = toSqlName(getDirName(dir))
-        print("tableName = " + tableName)
-    cursor = cnx.cursor()
-    columns = []
-    for path in files:
-        print("analyzing " + path)
-        table = readCsv(path, columns)
-        columns = table.columns
+def create_table_from_files(tableName, files):
+    mysql_password = os.environ['MysqlPassword']
+    cnx = mysql.connector.connect(user='root', password=mysql_password,
+                                  host='127.0.0.1',
+                                  database='import',
+                                  charset='utf8',
+                                  use_unicode=True)
 
-    columns = [x for x in columns if x.sqlName != 'total']
-    analyze_column_types(columns)
+    try:
+        remove_log_file()
+        cursor = cnx.cursor()
 
-    table = DbTable(tableName, columns)
-    yearColumn = YearColumn(0)
-    table.columns.append(yearColumn)
-    totalColumn = TotalColumn(table.columns)
-    table.columns.append(totalColumn)
-    createSql = table.toCreateSql()
-    logToFile(createSql)
-    cursor.execute(createSql)
+        columns = get_db_columns(files)
 
-    for path in files:
-        print("processing " + path)
-        table = readCsv(path, columns)
+        yearColumn = YearColumn(0)
+        columns.append(yearColumn)
+        columns.append(TotalColumn(columns))
+        table = DbTable(tableName, columns)
 
-        fileName = ntpath.basename(path)
-        year = re.match(r'(^|[^0-9])([0-9]{4})([^0-9]|$)', fileName).groups()[1]
-        print('Year read as ' + str(year))
-        yearColumn.year = year
-        yearColumn.csvIndex = None
-        totalColumn.csvIndex = None
+        print("dropping table " + tableName)
+        table.drop(cursor)
 
-        rowChunks = chunks(table.rows, 50)
+        createSql = table.toCreateSql()
+        log_to_file(createSql)
+        cursor.execute(createSql)
 
-        for chunk in rowChunks:
-            table.run_insert_commands(chunk, cursor)
+        for path in files:
+            print("processing " + path)
+            table = read_csv(tableName, path, columns)
 
-    cnx.commit()
-    cursor.close()
-    cnx.close()
-    print("Inserted " + str(len(table.rows)) + ' rows')
+            yearColumn.year = parse_year(path)
 
-finally:
-    cnx.close()
+            rowChunks = chunks(table.rows, 50)
+
+            for chunk in rowChunks:
+                table.run_insert_commands(chunk, cursor)
+
+        cnx.commit()
+        cursor.close()
+        cnx.close()
+        print("Inserted " + str(len(table.rows)) + ' rows')
+
+    finally:
+        cnx.close()
