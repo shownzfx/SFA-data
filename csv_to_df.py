@@ -66,6 +66,9 @@ def str_to_number (array):
 
 
 
+
+
+
 str_to_number(energy)
 
 for idx in range ( 0 , len ( energy ) ):
