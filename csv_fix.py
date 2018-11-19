@@ -1,3 +1,4 @@
+
 import csv
 import re
 import os
@@ -57,21 +58,27 @@ dir = "C:\\Z-Work\\Transit project\\Transit agency profile\\Employees\\"
 files=[]
 
 # for file in os.listdir(dir):
-#     if file.endswith(".csv") and re.search('201(3|4|5|6)',file) is not None:
-#         path=dir+file
-#         files.append(path)
+#      if file.endswith(".csv") and re.search('201(3|4|5|6)',file) is not None:
+#          path=dir+file
+#          files.append(path)
 
+# for file in os.listdir(dir):
+#     if file.endswith(".csv") and re.search('201(3|4|5|6)',file) is None:
+#         if file.endswith(".csv"):
+#             files.append(file)
 
-for file in os.listdir(dir):
-    if file.endswith(".csv") and re.match("201[567]", file) is not None :
-        path = dir + file
+os.chdir(dir)
+filename=[i for i in glob.glob('*.{}'.format("csv"))]
+
+for file in filename:
+    path=dir+file
+    if re.search("201[4567]", file) is None:
         fix_csv(path)
-
-
-# path = dir + "2005 Employee Count, Work Hours and VOMs.csv"
-# fix_csv(path)
-
-
-
-
+    else:
+        with open(path,"r") as f:
+            reader=csv.reader(f,delimiter=',')
+            lines=list(reader)
+        with open(path.replace('.csv', '.fixed1117.csv'), "w",newline="") as writeFile:
+            writer=csv.writer(writeFile)
+            writer.writerows(lines)
 
